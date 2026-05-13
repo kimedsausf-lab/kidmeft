@@ -7,7 +7,6 @@ import { SupabaseService } from '../services/SupabaseService';
 import { wasabiService } from '../services/WasabiService';
 import { useSiteConfig } from '../context/SiteConfigContext';
 import FormControlLabel from '@mui/material/FormControlLabel';
-import SendIcon from '@mui/icons-material/Send';
 import Container from '@mui/material/Container';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -26,14 +25,7 @@ import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import IconButton from '@mui/material/IconButton';
-import DeleteIcon from '@mui/icons-material/Delete';
-import SaveIcon from '@mui/icons-material/Save';
 import LinearProgress from '@mui/material/LinearProgress';
-import EditIcon from '@mui/icons-material/Edit';
-import CancelIcon from '@mui/icons-material/Cancel';
-import AddIcon from '@mui/icons-material/Add';
-import RemoveIcon from '@mui/icons-material/Remove';
-import SearchIcon from '@mui/icons-material/Search';
 import Chip from '@mui/material/Chip';
 import Switch from '@mui/material/Switch';
 import Dialog from '@mui/material/Dialog';
@@ -46,21 +38,30 @@ import InputLabel from '@mui/material/InputLabel';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
 import InputAdornment from '@mui/material/InputAdornment';
-import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import { styled } from '@mui/material/styles';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import CardMedia from '@mui/material/CardMedia';
 import Collapse from '@mui/material/Collapse';
 import Divider from '@mui/material/Divider';
-import VideoLibraryIcon from '@mui/icons-material/VideoLibrary';
-import SettingsIcon from '@mui/icons-material/Settings';
-import GroupIcon from '@mui/icons-material/Group';
 import Snackbar from '@mui/material/Snackbar';
 import MuiAlert, { AlertProps } from '@mui/material/Alert';
 import Tooltip from '@mui/material/Tooltip';
 import React from 'react';
-import SecurityIcon from '@mui/icons-material/Security';
+
+const SendIcon: FC = () => <span aria-hidden="true">↗</span>;
+const DeleteIcon: FC = () => <span aria-hidden="true">✕</span>;
+const SaveIcon: FC = () => <span aria-hidden="true">✓</span>;
+const EditIcon: FC = () => <span aria-hidden="true">✎</span>;
+const CancelIcon: FC = () => <span aria-hidden="true">✕</span>;
+const AddIcon: FC = () => <span aria-hidden="true">＋</span>;
+const RemoveIcon: FC = () => <span aria-hidden="true">−</span>;
+const SearchIcon: FC = () => <span aria-hidden="true">⌕</span>;
+const CloudUploadIcon: FC = () => <span aria-hidden="true">↑</span>;
+const VideoLibraryIcon: FC = () => <span aria-hidden="true">▶</span>;
+const SettingsIcon: FC = () => <span aria-hidden="true">⚙</span>;
+const GroupIcon: FC = () => <span aria-hidden="true">👥</span>;
+const SecurityIcon: FC = () => <span aria-hidden="true">🛡</span>;
 
 // Tab panel component
 interface TabPanelProps {
@@ -809,9 +810,9 @@ const Admin: FC = () => {
       <Paper elevation={3} sx={{ mb: 4 }}>
         <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
           <Tabs value={tabValue} onChange={handleTabChange} aria-label="admin tabs">
-            <Tab icon={<VideoLibraryIcon />} label="Manage Videos" />
-            <Tab icon={<SecurityIcon />} label="Purchases" />
-            <Tab icon={<SettingsIcon />} label="Site Configuration & Users" />
+            <Tab label="Manage Videos" />
+            <Tab label="Purchases" />
+            <Tab label="Site Configuration & Users" />
           </Tabs>
         </Box>
         
@@ -828,7 +829,6 @@ const Admin: FC = () => {
                 <Button
                   variant="contained"
                   color="primary"
-                  startIcon={<AddIcon />}
                   onClick={() => setShowVideoForm(!showVideoForm)}
                 >
                   {showVideoForm ? 'Hide Form' : 'Upload New Video'}
@@ -859,7 +859,7 @@ const Admin: FC = () => {
                   variant="outlined"
                   size="small"
                   InputProps={{
-                    startAdornment: <SearchIcon sx={{ color: 'action.active', mr: 1 }} />,
+                    startAdornment: <InputAdornment position="start">⌕</InputAdornment>,
                   }}
                 />
               </Box>
@@ -903,7 +903,7 @@ const Admin: FC = () => {
                             size="small"
                             sx={{ mr: 1 }}
                           >
-                            <EditIcon fontSize="small" />
+                            ✎
                           </IconButton>
                           <IconButton 
                             color="error" 
@@ -913,7 +913,7 @@ const Admin: FC = () => {
                             }}
                             aria-label="delete video"
                           >
-                            <DeleteIcon />
+                            ✕
                           </IconButton>
                         </TableCell>
                       </TableRow>
@@ -1055,7 +1055,6 @@ const Admin: FC = () => {
                         setRelatedVideos([{ id: Date.now().toString(), videoFile: null, duration: null } as any]);
                       }
                     }}
-                    startIcon={showRelatedVideos ? <RemoveIcon /> : <AddIcon />}
                   >
                     {showRelatedVideos ? 'Hide Related Videos' : 'Add Related Videos'}
                   </Button>
@@ -1077,7 +1076,6 @@ const Admin: FC = () => {
                             size="small"
                             color="error"
                             onClick={() => removeRelatedVideo(relatedVideo.id)}
-                            startIcon={<DeleteIcon />}
                           >
                             Remove
                           </Button>
@@ -1142,7 +1140,6 @@ const Admin: FC = () => {
                     <Button
                       variant="outlined"
                       onClick={addRelatedVideo}
-                      startIcon={<AddIcon />}
                       sx={{ mt: 1 }}
                     >
                       Add Another Source
@@ -1160,7 +1157,6 @@ const Admin: FC = () => {
                   color="primary"
                   onClick={handleSaveVideo}
                   disabled={uploading || !videoTitle || !videoDescription || !videoPrice}
-                  startIcon={uploading ? <CircularProgress size={20} /> : <SaveIcon />}
                 >
                   {uploading ? 'Uploading...' : (editingVideo ? 'Update Video' : 'Upload Video')}
                 </Button>
@@ -1297,7 +1293,6 @@ const Admin: FC = () => {
                   variant="contained"
                   color="primary"
                   onClick={() => setEditingConfig(!editingConfig)}
-                  startIcon={editingConfig ? <CancelIcon /> : <EditIcon />}
                 >
                   {editingConfig ? 'Cancel Edit' : 'Edit Config'}
                 </Button>
@@ -1590,7 +1585,6 @@ const Admin: FC = () => {
                   variant="contained"
                   color="primary"
                   onClick={handleSaveConfig}
-                  startIcon={<SaveIcon />}
                 >
                   Save Configuration
                 </Button>
@@ -1677,7 +1671,6 @@ const Admin: FC = () => {
             <Grid container spacing={2} alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
               <Grid item>
                 <Typography variant="h5" component="h2">
-                  <GroupIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
                   Admin Users Management
                 </Typography>
               </Grid>
@@ -1685,7 +1678,6 @@ const Admin: FC = () => {
                 <Button
                   variant="contained"
                   color="primary"
-                  startIcon={<AddIcon />}
                   onClick={() => {
                     setNewUser(true);
                     setUserName('');
@@ -1744,7 +1736,7 @@ const Admin: FC = () => {
                               size="small"
                               sx={{ mr: 1 }}
                             >
-                              <EditIcon fontSize="small" />
+                              ✎
                             </IconButton>
                             <IconButton 
                               color="error" 
@@ -1754,7 +1746,7 @@ const Admin: FC = () => {
                               }}
                               aria-label="delete user"
                             >
-                              <DeleteIcon />
+                              ✕
                             </IconButton>
                           </TableCell>
                         </TableRow>
@@ -1897,7 +1889,6 @@ const Admin: FC = () => {
                       setLoading(false);
                     }
                   }}
-                  startIcon={<SaveIcon />}
                   disabled={loading}
                 >
                   {loading ? 'Saving...' : (newUser ? 'Create Admin User' : 'Update Admin User')}
@@ -1920,89 +1911,6 @@ const Admin: FC = () => {
           )}
         </TabPanel>
 
-        {/* Purchases Tab */}
-        <TabPanel value={tabValue} index={2}>
-          <Box sx={{ mb: 4 }}>
-            <Typography variant="h5" component="h2" gutterBottom>
-              Purchase History
-            </Typography>
-            
-            {error && (
-              <Alert severity="error" sx={{ mb: 2, mt: 2 }}>
-                {error}
-              </Alert>
-            )}
-
-            {loadingPurchases ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
-                <CircularProgress />
-              </Box>
-            ) : (
-              <TableContainer component={Paper}>
-                <Table>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell><strong>Date</strong></TableCell>
-                      <TableCell><strong>Buyer</strong></TableCell>
-                      <TableCell><strong>Email</strong></TableCell>
-                      <TableCell><strong>Video</strong></TableCell>
-                      <TableCell><strong>Amount</strong></TableCell>
-                      <TableCell><strong>Method</strong></TableCell>
-                      <TableCell><strong>Status</strong></TableCell>
-                      <TableCell><strong>Transaction ID</strong></TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {purchases.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={8} align="center">
-                          No purchases found
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      purchases.map((purchase) => (
-                        <TableRow key={purchase.id}>
-                          <TableCell>
-                            {new Date(purchase.created_at).toLocaleString()}
-                          </TableCell>
-                          <TableCell>{purchase.buyer_name || 'N/A'}</TableCell>
-                          <TableCell>{purchase.buyer_email}</TableCell>
-                          <TableCell>
-                            {purchase.video_title || 'N/A'}
-                          </TableCell>
-                          <TableCell>
-                            {purchase.amount} {purchase.currency?.toUpperCase()}
-                          </TableCell>
-                          <TableCell>
-                            <Chip 
-                              label={purchase.payment_method} 
-                              size="small" 
-                              color={purchase.payment_method === 'stripe' ? 'primary' : purchase.payment_method === 'who' ? 'secondary' : 'default'}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Chip 
-                              label={purchase.status} 
-                              size="small" 
-                              color={purchase.status === 'completed' ? 'success' : purchase.status === 'failed' ? 'error' : 'default'}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Tooltip title={purchase.transaction_id}>
-                              <Typography variant="body2" sx={{ fontFamily: 'monospace', maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {purchase.transaction_id}
-                              </Typography>
-                            </Tooltip>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            )}
-          </Box>
-        </TabPanel>
       </Paper>
       
       {/* Delete confirmation dialog */}

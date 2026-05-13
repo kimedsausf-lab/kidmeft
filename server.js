@@ -7,7 +7,6 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import apiRoutes from './api-routes.js';
-import { createClient } from '@supabase/supabase-js';
 // SQLite removido - usando Wasabi como fonte principal
 
 const __filename = fileURLToPath(import.meta.url);
@@ -17,28 +16,6 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
-app.use(cors({
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
-    // In development, allow localhost
-    if (process.env.NODE_ENV !== 'production') {
-      if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
-        return callback(null, true);
-      }
-    }
-    
-    // In production, allow ALL domains - completamente aberto
-    if (process.env.NODE_ENV === 'production') {
-      return callback(null, true);
-    }
-    
-    // For any other case, allow the request
-    callback(null, true);
-  },
-  credentials: true
-}));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
@@ -137,6 +114,12 @@ app.get('/api/health', (req, res) => {
     port: PORT
   });
 });
+
+// CORS somente para API (não aplicar em /assets, css, etc.)
+app.use('/api', cors({
+  origin: true, // allow all origins
+  credentials: true
+}));
 app.use('/api', apiRoutes);
 
 // Depois: servir estáticos e SPA fallback
@@ -169,47 +152,6 @@ async function startServer() {
       console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
       
       console.log('Metadados: Supabase | Arquivos: Wasabi');
-
-      // Garantir admin padrão no Supabase
-      (async () => {
-        try {
-          const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-          const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-          if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE) {
-            console.warn('[bootstrap] Supabase env not set; skip ensure admin');
-            return;
-          }
-          const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE, { auth: { persistSession: false } });
-          const { data: existing, error: selErr } = await supabase
-            .from('users')
-            .select('id')
-            .eq('email', 'admin@gmail.com')
-            .maybeSingle();
-          if (selErr) {
-            console.warn('[bootstrap] Could not query users table:', selErr.message);
-            return;
-          }
-          if (!existing) {
-            const { error: insErr } = await supabase
-              .from('users')
-              .insert({
-                email: 'admin@gmail.com',
-                name: 'Administrator',
-                role: 'admin',
-                password_hash: '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9'
-              });
-            if (insErr) {
-              console.warn('[bootstrap] Failed to insert default admin:', insErr.message);
-            } else {
-              console.log('[bootstrap] Default admin ensured (admin@gmail.com)');
-            }
-          } else {
-            console.log('[bootstrap] Admin already exists');
-          }
-        } catch (e) {
-          console.warn('[bootstrap] Ensure admin error:', e?.message || e);
-        }
-      })();
     });
   } catch (error) {
     console.error('Failed to start server:', error);

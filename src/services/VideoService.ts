@@ -157,23 +157,9 @@ export class VideoService {
         );
       }
 
-      // Obter URLs de miniaturas para cada vídeo (busca no Wasabi)
-      for (const video of videos) {
-        const thumbnailId = video.thumbnailFileId || video.thumbnail_id;
-        
-        if (thumbnailId) {
-          try {
-            video.thumbnailUrl = await wasabiService.getThumbnailUrl(thumbnailId);
-          } catch (error) {
-            console.error(`Erro ao obter miniatura para o vídeo ${video.$id}:`, error);
-            // Usar placeholder se a miniatura não estiver disponível
-            video.thumbnailUrl = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjE4MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjE4MCIgZmlsbD0iI2Y1ZjVmNSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTk5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5WaWRlbyBUaHVtYm5haWw8L3RleHQ+PC9zdmc+';
-          }
-        } else {
-          // Usar placeholder se não houver ID de miniatura
-          video.thumbnailUrl = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjE4MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjE4MCIgZmlsbD0iI2Y1ZjVmNSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTk5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5WaWRlbyBUaHVtYm5haWw8L3RleHQ+PC9zdmc+';
-        }
-      }
+      // IMPORTANT: do not resolve thumbnail URLs from Wasabi here.
+      // This keeps the list fast so cards render immediately.
+      // The card itself can lazy-load media only when needed.
 
       // Atualizar cache se não há busca
       if (!searchQuery) {
@@ -359,6 +345,16 @@ export class VideoService {
       return await wasabiService.getFileUrl(fileId);
     } catch (error) {
       console.error('Error getting file URL by id:', error);
+      return null;
+    }
+  }
+
+  // Get thumbnail URL by Wasabi file key
+  static async getThumbnailUrlById(fileId: string): Promise<string | null> {
+    try {
+      return await wasabiService.getThumbnailUrl(fileId);
+    } catch (error) {
+      console.error('Error getting thumbnail URL by id:', error);
       return null;
     }
   }

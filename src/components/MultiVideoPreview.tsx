@@ -5,12 +5,7 @@ import CardMedia from '@mui/material/CardMedia';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
 import Chip from '@mui/material/Chip';
-import CircularProgress from '@mui/material/CircularProgress';
 import Skeleton from '@mui/material/Skeleton';
-import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import { VideoService } from '../services/VideoService';
 
 interface VideoPreview {
@@ -196,9 +191,12 @@ const MultiVideoPreview: FC<MultiVideoPreviewProps> = ({
               alignItems: 'center',
               justifyContent: 'center',
               boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+              color: 'white',
+              fontSize: '1.8rem',
+              fontWeight: 900,
             }}
           >
-            <PlayArrowIcon sx={{ fontSize: 30, color: 'white' }} />
+            ▶
           </Box>
         </Box>
 
@@ -229,7 +227,6 @@ const MultiVideoPreview: FC<MultiVideoPreviewProps> = ({
                   height: '20px',
                   fontSize: '0.7rem'
                 }}
-                icon={<AccessTimeIcon sx={{ color: 'white', fontSize: '12px' }} />}
               />
             )}
             
@@ -274,7 +271,7 @@ const MultiVideoPreview: FC<MultiVideoPreviewProps> = ({
               }
             }}
           >
-            <ChevronLeftIcon />
+            ‹
           </IconButton>
           
           <IconButton
@@ -291,7 +288,7 @@ const MultiVideoPreview: FC<MultiVideoPreviewProps> = ({
               }
             }}
           >
-            <ChevronRightIcon />
+            ›
           </IconButton>
         </>
       )}

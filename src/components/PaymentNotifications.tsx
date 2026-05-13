@@ -6,8 +6,6 @@ import Typography from '@mui/material/Typography';
 import Fade from '@mui/material/Fade';
 import Avatar from '@mui/material/Avatar';
 import Stack from '@mui/material/Stack';
-import PaymentIcon from '@mui/icons-material/Payment';
-import CreditCardIcon from '@mui/icons-material/CreditCard';
 import { VideoService, SortOption, type Video } from '../services/VideoService';
 import type { Theme } from '@mui/material/styles';
 
@@ -55,7 +53,7 @@ function formatCurrency(amount: number): string {
   }
 }
 
-const providerIcon = (provider: Provider): JSX.Element => provider === 'Stripe' ? <CreditCardIcon fontSize="small" /> : <PaymentIcon fontSize="small" />;
+const providerLabel = (provider: Provider): string => (provider === 'Stripe' ? 'Card' : 'Pay');
 
 interface NotificationCardProps {
   visible: boolean;
@@ -75,7 +73,7 @@ const NotificationCard: FC<NotificationCardProps> = ({ visible, country, country
           <Box sx={{ flexGrow: 1, minWidth: 0 }}>
             <Typography variant="body2" noWrap>Someone purchased • {country}</Typography>
             <Typography variant="caption" color="text.secondary" noWrap>
-              {providerIcon(provider)}
+              {providerLabel(provider)}
               <Box component="span" sx={{ ml: 0.5 }}>completed via {provider}</Box>
             </Typography>
             <Typography variant="body2" noWrap>

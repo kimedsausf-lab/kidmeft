@@ -12,25 +12,25 @@
   text-size-adjust: 100%;
   
   /* Professional color variables */
-  --color-primary: #0070ba;
-  --color-secondary: #1546a0;
+  --color-primary: #e31b23;
+  --color-secondary: #c9151d;
   --color-success: #4caf50;
   --color-warning: #ff9800;
-  --color-info: #2196f3;
+  --color-info: #e31b23;
 }
 
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background: linear-gradient(180deg, rgba(3,9,37,1) 0%, rgba(2,6,23,1) 100%) !important;
+  background: #000000 !important;
   color: #e6e6e6 !important;
   overflow-x: hidden;
   scroll-behavior: smooth;
 }
 
 html {
-  background: linear-gradient(180deg, rgba(3,9,37,1) 0%, rgba(2,6,23,1) 100%) !important;
+  background: #000000 !important;
 }
 
 #root {
@@ -45,8 +45,8 @@ $dark-bg: #020617;
 $dark-paper: #020824;
 $light-bg: #f7f7fb;
 $light-paper: #ffffff;
-$primary-color: #0070ba;
-$secondary-color: #1546a0;
+$primary-color: #e31b23;
+$secondary-color: #c9151d;
 $text-light: #e6e6e6;
 $text-dark: #111111;
 
@@ -137,11 +137,11 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(30, 64, 175, 0.7);
+  background: rgba(227, 27, 35, 0.55);
   border-radius: 6px;
   
   &:hover {
-    background: rgba(30, 64, 175, 0.9);
+    background: rgba(227, 27, 35, 0.75);
   }
 }
 

@@ -4,21 +4,18 @@ import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import CardMedia from '@mui/material/CardMedia';
 import Typography from '@mui/material/Typography';
-import { Chip, CircularProgress, Button, Dialog, DialogTitle, DialogContent, DialogActions, FormControl, InputLabel, Select, MenuItem } from '@mui/material';
+import { Chip, CircularProgress, Button, Dialog, DialogTitle, DialogContent, FormControl, InputLabel, Select, MenuItem } from '@mui/material';
 import Box from '@mui/material/Box';
-import VisibilityIcon from '@mui/icons-material/Visibility';
-import AccessTimeIcon from '@mui/icons-material/AccessTime';
-import TelegramIcon from '@mui/icons-material/Telegram';
-import CreditCardIcon from '@mui/icons-material/CreditCard';
 import Skeleton from '@mui/material/Skeleton';
-import PaymentIcon from '@mui/icons-material/Payment';
-import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
-import CloseIcon from '@mui/icons-material/Close';
 import { VideoService } from '../services/VideoService';
 import { useSiteConfig } from '../context/SiteConfigContext';
 import { StripeService } from '../services/StripeService';
 import { isPayJsrCheckoutAvailable } from '../utils/payjsrAvailability';
 import MultiVideoPreview from './MultiVideoPreview';
+
+const PREVIEW_CHANGE_EVENT = 'video-card-preview-change';
+let previewLoadInFlightForVideoId: string | null = null;
+let activePreviewVideoId: string | null = null;
 
 interface VideoCardProps {
   video: {
@@ -27,6 +24,8 @@ interface VideoCardProps {
     description: string;
     price: number;
     thumbnailUrl?: string;
+    thumbnailFileId?: string;
+    thumbnail_id?: string;
     isPurchased?: boolean;
     duration?: string | number;
     views?: number;
@@ -43,9 +42,10 @@ interface VideoCardProps {
     is_free?: boolean;
     product_link?: string;
   };
+  onSelectVideo?: (videoId: string) => void;
 }
 
-const VideoCard: FC<VideoCardProps> = ({ video }) => {
+const VideoCard: FC<VideoCardProps> = ({ video, onSelectVideo }) => {
   const navigate = useNavigate();
   const [isHovered, setIsHovered] = useState(false);
   const [isThumbnailLoading, setIsThumbnailLoading] = useState(true);
@@ -53,19 +53,21 @@ const VideoCard: FC<VideoCardProps> = ({ video }) => {
   const { telegramUsername, stripePublishableKey, stripeSecretKey, cryptoWallets, whoApiKey, paypalClientId, loading: configLoading } = useSiteConfig();
   const [isStripeLoading, setIsStripeLoading] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [selectedCryptoWallet, setSelectedCryptoWallet] = useState('');
+  const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
+  const [previewVideoUrl, setPreviewVideoUrl] = useState<string | null>(null);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [resolvedThumbnailUrl, setResolvedThumbnailUrl] = useState<string | null>(video.thumbnailUrl || null);
   
   const handleCardClick = async () => {
     try {
       // Increment view count
       await VideoService.incrementViews(video.$id);
-      
-      // Navigate to video page
-      navigate(`/video/${video.$id}`);
+      if (onSelectVideo) onSelectVideo(video.$id);
     } catch (error) {
       console.error('Error handling video card click:', error);
-      // Navigate anyway even if incrementing views fails
-      navigate(`/video/${video.$id}`);
+      if (onSelectVideo) onSelectVideo(video.$id);
     }
   };
 
@@ -128,15 +130,60 @@ const VideoCard: FC<VideoCardProps> = ({ video }) => {
   // Ajuste para lidar com formato created_at ou createdAt
   const createdAtField = video.createdAt || video.created_at;
 
-  // Handle thumbnail loading states
+  // Keep thumbnail in sync when provided directly by API.
   useEffect(() => {
     if (video.thumbnailUrl) {
+      setResolvedThumbnailUrl(video.thumbnailUrl);
       setIsThumbnailLoading(true);
       setThumbnailError(false);
-    } else {
-      setIsThumbnailLoading(false);
+      return;
     }
-  }, [video.thumbnailUrl]);
+
+    const thumbnailId = video.thumbnailFileId || video.thumbnail_id;
+    if (!thumbnailId) {
+      setResolvedThumbnailUrl(null);
+      setIsThumbnailLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsThumbnailLoading(true);
+    setThumbnailError(false);
+
+    void VideoService.getThumbnailUrlById(thumbnailId)
+      .then((url) => {
+        if (cancelled) return;
+        if (url) {
+          setResolvedThumbnailUrl(url);
+        } else {
+          setResolvedThumbnailUrl(null);
+          setIsThumbnailLoading(false);
+          setThumbnailError(true);
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setResolvedThumbnailUrl(null);
+        setIsThumbnailLoading(false);
+        setThumbnailError(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [video.thumbnailUrl, video.thumbnailFileId, video.thumbnail_id]);
+
+  useEffect(() => {
+    const handlePreviewChange = (event: Event) => {
+      const customEvent = event as CustomEvent<{ videoId: string | null }>;
+      if (customEvent.detail?.videoId !== video.$id) {
+        setIsPreviewPlaying(false);
+      }
+    };
+
+    window.addEventListener(PREVIEW_CHANGE_EVENT, handlePreviewChange);
+    return () => window.removeEventListener(PREVIEW_CHANGE_EVENT, handlePreviewChange);
+  }, [video.$id]);
 
   const handleThumbnailLoad = () => {
     setIsThumbnailLoading(false);
@@ -147,9 +194,54 @@ const VideoCard: FC<VideoCardProps> = ({ video }) => {
     setThumbnailError(true);
   };
 
-  const handlePreviewClick = (e: React.MouseEvent) => {
+  const handlePlayClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    navigate(`/video/${video.$id}`);
+    if (isPreviewPlaying) {
+      setIsPreviewPlaying(false);
+      if (activePreviewVideoId === video.$id) {
+        activePreviewVideoId = null;
+        window.dispatchEvent(new CustomEvent(PREVIEW_CHANGE_EVENT, { detail: { videoId: null } }));
+      }
+      return;
+    }
+
+    const openPreview = async () => {
+      if (previewVideoUrl) {
+        activePreviewVideoId = video.$id;
+        window.dispatchEvent(new CustomEvent(PREVIEW_CHANGE_EVENT, { detail: { videoId: video.$id } }));
+        setIsPreviewPlaying(true);
+        return;
+      }
+
+      if (previewLoadInFlightForVideoId && previewLoadInFlightForVideoId !== video.$id) {
+        return;
+      }
+
+      try {
+        previewLoadInFlightForVideoId = video.$id;
+        setIsPreviewLoading(true);
+        const url = await VideoService.getVideoFileUrl(video.$id);
+        if (!url) return;
+        setPreviewVideoUrl(url);
+        activePreviewVideoId = video.$id;
+        window.dispatchEvent(new CustomEvent(PREVIEW_CHANGE_EVENT, { detail: { videoId: video.$id } }));
+        setIsPreviewPlaying(true);
+      } catch (error) {
+        console.error('Failed to load preview video URL:', error);
+      } finally {
+        if (previewLoadInFlightForVideoId === video.$id) {
+          previewLoadInFlightForVideoId = null;
+        }
+        setIsPreviewLoading(false);
+      }
+    };
+
+    void openPreview();
+  };
+
+  const handleDetailsClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowDetailsModal(true);
   };
 
   const handleTelegramClick = (e: React.MouseEvent) => {
@@ -227,7 +319,7 @@ Please let me know how to proceed with payment.`;
       setIsStripeLoading(true);
       await StripeService.initStripe(stripePublishableKey);
       const productName = 'Video Access';
-      const successUrl = `${window.location.origin}/#/payment-success?video_id=${video.$id}&session_id={CHECKOUT_SESSION_ID}&payment_method=stripe`;
+      const successUrl = `${window.location.origin}/#/payment-success?video_id=${video.$id}&payment_method=stripe`;
       const cancelUrl = 'https://www.google.com/';
       const checkout = await StripeService.createCheckoutSession(
         video.price,
@@ -371,26 +463,27 @@ I'm sending the payment from my wallet. Please confirm the transaction and provi
           display: 'flex', 
           flexDirection: 'column',
           transition: 'transform 0.25s ease, box-shadow 0.25s ease',
-          borderRadius: 15,
+          borderRadius: '20px',
           overflow: 'hidden',
           position: 'relative',
-          boxShadow: theme =>
-            theme.palette.mode === 'dark'
-              ? '0 10px 30px rgba(15,23,42,0.9)'
-              : '0 8px 24px rgba(15,23,42,0.18)',
+          boxShadow: theme => theme.palette.mode === 'dark'
+            ? '0 18px 40px rgba(0,0,0,0.65)'
+            : '0 8px 24px rgba(15,23,42,0.18)',
           cursor: 'pointer',
-          backgroundColor: theme => theme.palette.background.paper,
-          border: theme => theme.palette.mode === 'dark' ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(0,0,0,0.06)',
+          background: theme => theme.palette.mode === 'dark'
+            ? 'linear-gradient(180deg, #0f0f11 0%, #09090b 100%)'
+            : theme.palette.background.paper,
+          border: theme => theme.palette.mode === 'dark' ? '1px solid rgba(227, 27, 35, 0.58)' : '1px solid rgba(0,0,0,0.06)',
           '&:hover': {
             transform: 'translateY(-4px)',
             boxShadow: theme =>
               theme.palette.mode === 'dark'
-                ? '0 18px 40px rgba(37,99,235,0.65)'
-                : '0 16px 36px rgba(37,99,235,0.35)',
+                ? '0 26px 62px rgba(227, 27, 35, 0.32)'
+                : '0 16px 36px rgba(255,0,0,0.22)',
             borderColor: theme =>
               theme.palette.mode === 'dark'
-                ? 'rgba(129,140,248,0.6)'
-                : 'rgba(37,99,235,0.4)',
+                ? 'rgba(227, 27, 35, 0.8)'
+                : 'rgba(255,70,70,0.35)',
           },
           '&::after': {
             content: '""',
@@ -401,7 +494,7 @@ I'm sending the payment from my wallet. Please confirm the transaction and provi
             height: 10,
             borderRadius: '999px',
             background:
-              'radial-gradient(circle at 50% 0, rgba(56,189,248,0.55), transparent 60%)',
+              'radial-gradient(circle at 50% 0, rgba(227, 27, 35, 0.7), transparent 60%)',
             opacity: 0,
             filter: 'blur(6px)',
             transition: 'opacity 0.25s ease, transform 0.25s ease',
@@ -419,7 +512,30 @@ I'm sending the payment from my wallet. Please confirm the transaction and provi
       >
       <Box sx={{ position: 'relative', paddingTop: '56.25%' /* 16:9 aspect ratio */ }}>
         {/* Multi-video preview (from previewSources) or single thumbnail */}
-        {(video as any).previewSources && (video as any).previewSources.length > 0 ? (
+        {isPreviewPlaying && previewVideoUrl ? (
+          <Box
+            sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              backgroundColor: '#05000c',
+              zIndex: 4,
+            }}
+          >
+            <video
+              controls
+              autoPlay
+              preload="metadata"
+              src={previewVideoUrl}
+              style={{ width: '100%', height: '100%', objectFit: 'cover', backgroundColor: '#05000c' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              Your browser does not support video playback.
+            </video>
+          </Box>
+        ) : (video as any).previewSources && (video as any).previewSources.length > 0 ? (
           <Box sx={{ 
             position: 'absolute',
             top: 0,
@@ -443,11 +559,11 @@ I'm sending the payment from my wallet. Please confirm the transaction and provi
         ) : (
           <>
             {/* Single thumbnail image */}
-        {video.thumbnailUrl && !thumbnailError ? (
+        {resolvedThumbnailUrl && !thumbnailError ? (
           <CardMedia
             component="img"
             loading="lazy"
-            image={video.thumbnailUrl}
+            image={resolvedThumbnailUrl}
             alt={video.title}
             sx={{ 
               position: 'absolute',
@@ -478,8 +594,65 @@ I'm sending the payment from my wallet. Please confirm the transaction and provi
           </>
         )}
 
+        {/* Center Play button overlay */}
+        {!isPreviewPlaying && !isPreviewLoading && !thumbnailError && (
+          <Box
+            onClick={handlePlayClick}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                handlePlayClick(e as any);
+              }
+            }}
+            sx={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 4,
+              cursor: 'pointer',
+            }}
+          >
+            <Box
+              sx={{
+                width: 74,
+                height: 74,
+                borderRadius: '999px',
+                backgroundColor: 'rgba(0,0,0,0.55)',
+                border: '1px solid rgba(227,27,35,0.65)',
+                boxShadow: '0 16px 40px rgba(227,27,35,0.22)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backdropFilter: 'blur(6px)',
+                transition: 'transform 0.15s ease, background-color 0.15s ease',
+                '&:hover': {
+                  transform: 'scale(1.04)',
+                  backgroundColor: 'rgba(0,0,0,0.65)',
+                },
+              }}
+            >
+              <Box
+                sx={{
+                  width: 0,
+                  height: 0,
+                  borderTop: '14px solid transparent',
+                  borderBottom: '14px solid transparent',
+                  borderLeft: '22px solid #ffffff',
+                  marginLeft: '4px',
+                  filter: 'drop-shadow(0 6px 18px rgba(0,0,0,0.55))',
+                }}
+              />
+            </Box>
+          </Box>
+        )}
+
         {/* Loading indicator overlay */}
-        {isThumbnailLoading && video.thumbnailUrl && (
+        {(isThumbnailLoading && !!resolvedThumbnailUrl) || isPreviewLoading ? (
           <Box
             sx={{
               position: 'absolute',
@@ -513,10 +686,10 @@ I'm sending the payment from my wallet. Please confirm the transaction and provi
                 fontSize: '0.75rem'
               }}
             >
-              Loading...
+              {isPreviewLoading ? 'Loading preview...' : 'Loading...'}
             </Typography>
           </Box>
-        )}
+        ) : null}
 
         {/* Error state overlay */}
         {thumbnailError && (
@@ -577,7 +750,7 @@ I'm sending the payment from my wallet. Please confirm the transaction and provi
             width: '100%',
             height: '100%',
             background: theme => theme.palette.mode === 'dark' 
-              ? 'linear-gradient(to top, rgba(2,6,23,0.85) 0%, rgba(15,23,42,0.5) 50%, rgba(15,23,42,0.3) 100%)' 
+              ? 'linear-gradient(to top, rgba(10,0,25,0.86) 0%, rgba(18,0,34,0.55) 54%, rgba(23,0,36,0.2) 100%)' 
               : 'linear-gradient(to top, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.3) 60%, rgba(255,255,255,0) 100%)',
             opacity: isHovered ? 1 : (theme => theme.palette.mode === 'dark' ? 0.4 : 0.6),
             transition: 'all 0.3s ease',
@@ -593,7 +766,7 @@ I'm sending the payment from my wallet. Please confirm the transaction and provi
               position: 'absolute', 
               bottom: 8, 
               right: 8, 
-              backgroundColor: 'rgba(2,6,23,0.9)',
+              backgroundColor: 'rgba(20,0,40,0.8)',
               color: 'white',
               fontWeight: 'bold',
               height: '24px',
@@ -601,7 +774,6 @@ I'm sending the payment from my wallet. Please confirm the transaction and provi
                 px: 1,
               }
             }}
-            icon={<AccessTimeIcon sx={{ color: 'white', fontSize: '14px' }} />}
           />
         )}
         
@@ -616,8 +788,8 @@ I'm sending the payment from my wallet. Please confirm the transaction and provi
             fontWeight: 'bold',
             fontSize: '0.9rem',
             height: '32px',
-            backgroundColor: theme => theme.palette.primary.main,
-            border: '1px solid rgba(255, 255, 255, 0.25)',
+            background: 'linear-gradient(90deg, #ff2f77 0%, #e60057 100%)',
+            border: '1px solid rgba(255, 255, 255, 0.35)',
             '& .MuiChip-label': {
               color: 'white',
               fontWeight: 'bold',
@@ -627,7 +799,7 @@ I'm sending the payment from my wallet. Please confirm the transaction and provi
         />
       </Box>
       
-      <CardContent sx={{ flexGrow: 1, p: 2, pt: 1.5 }}>
+      <CardContent sx={{ flexGrow: 1, p: 1.5, pt: 1.25, background: 'linear-gradient(180deg, #13010d 0%, #09000a 100%)' }}>
         <Typography gutterBottom variant="h6" component="div" sx={{
           fontWeight: 'bold',
           fontSize: '1rem',
@@ -639,21 +811,20 @@ I'm sending the payment from my wallet. Please confirm the transaction and provi
           display: '-webkit-box',
           WebkitLineClamp: 2,
           WebkitBoxOrient: 'vertical',
-          color: theme => theme.palette.text.primary,
+          color: '#f2f2f3',
         }}>
           {video.title}
         </Typography>
         
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: theme => theme.palette.text.secondary }}>
-            <VisibilityIcon sx={{ fontSize: 16 }} />
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: '#b8b2be' }}>
             <Typography variant="caption">
               {formatViews(video.views)}
             </Typography>
           </Box>
           
           {createdAtField && (
-            <Typography variant="caption" sx={{ color: theme => theme.palette.text.secondary }}>
+            <Typography variant="caption" sx={{ color: '#b8b2be' }}>
               {formatDate(createdAtField)}
             </Typography>
           )}
@@ -661,21 +832,25 @@ I'm sending the payment from my wallet. Please confirm the transaction and provi
 
         {/* Actions: Preview and Payment/Link buttons - Mobile optimized */}
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, mt: 1 }}>
-          {/* Preview button - Always first and full width */}
           <Button
-            variant="contained"
-            color="primary"
+            variant="outlined"
             fullWidth
-            startIcon={<VisibilityIcon />}
-            onClick={handlePreviewClick}
+            onClick={handleDetailsClick}
             sx={{
               py: 0.75,
               fontWeight: 'bold',
               fontSize: '0.875rem',
               textTransform: 'none',
+              borderRadius: '999px',
+              borderColor: 'rgba(227,27,35,0.6)',
+              color: '#ffc2c6',
+              '&:hover': {
+                borderColor: 'rgba(227,27,35,0.85)',
+                backgroundColor: 'rgba(227,27,35,0.12)',
+              },
             }}
           >
-            Preview
+            Details
           </Button>
 
           {/* Conditional second row based on video type */}
@@ -705,7 +880,6 @@ I'm sending the payment from my wallet. Please confirm the transaction and provi
                 variant="outlined"
                 color="primary"
                 fullWidth
-                startIcon={<TelegramIcon />}
                 href={telegramHref}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -714,6 +888,13 @@ I'm sending the payment from my wallet. Please confirm the transaction and provi
                   fontWeight: 'bold',
                   fontSize: '0.875rem',
                   textTransform: 'none',
+                  borderRadius: '999px',
+                  borderColor: 'rgba(227,27,35,0.6)',
+                  color: '#ffc2c6',
+                  '&:hover': {
+                    borderColor: 'rgba(227,27,35,0.8)',
+                    backgroundColor: 'rgba(227,27,35,0.12)',
+                  },
                 }}
               >
                 Telegram
@@ -721,7 +902,6 @@ I'm sending the payment from my wallet. Please confirm the transaction and provi
               <Button
                 variant="contained"
                 fullWidth
-                startIcon={<CreditCardIcon />}
                 onClick={handleStripePay}
                 disabled={isStripeLoading}
                 sx={{
@@ -729,10 +909,11 @@ I'm sending the payment from my wallet. Please confirm the transaction and provi
                   fontWeight: 'bold',
                   fontSize: '0.875rem',
                   textTransform: 'none',
-              backgroundColor: theme => theme.palette.primary.main,
-              color: 'white',
+                  borderRadius: '999px',
+                  background: '#e31b23',
+                  color: 'white',
                   '&:hover': {
-            backgroundColor: theme => theme.palette.secondary.main,
+                    background: '#c9151d',
                   },
                   '&:disabled': {
                     background: '#555',
@@ -740,11 +921,33 @@ I'm sending the payment from my wallet. Please confirm the transaction and provi
                   }
                 }}
               >
-                Payment options
+                Payment Options
               </Button>
             </Box>
           ) : null}
         </Box>
+
+        {!video.is_free && (
+          <Box sx={{ mt: 1.1, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+            <Typography sx={{ color: '#7b747f', textDecoration: 'line-through', fontWeight: 600, fontSize: '0.95rem' }}>
+              ${(video.price * 2).toFixed(0)}
+            </Typography>
+            <Typography sx={{ color: '#ff4a55', fontWeight: 900, fontSize: '1.8rem', lineHeight: 1 }}>
+              ${video.price.toFixed(0)}
+            </Typography>
+            <Chip
+              label={`SAVE $${Math.max(0, Math.round(video.price)).toFixed(0)}`}
+              size="small"
+              sx={{
+                height: '26px',
+                fontWeight: 800,
+                background: '#e31b23',
+                color: 'white',
+                '& .MuiChip-label': { px: 1.2 },
+              }}
+            />
+          </Box>
+        )}
 
       </CardContent>
       </Card>
@@ -759,30 +962,30 @@ I'm sending the payment from my wallet. Please confirm the transaction and provi
           PaperProps={{
             sx: {
               background: theme => theme.palette.mode === 'dark'
-                ? 'linear-gradient(135deg, #020617 0%, #020c2a 100%)'
-                : 'linear-gradient(135deg, #ffffff 0%, #e5f0ff 100%)',
+                ? 'linear-gradient(135deg, #140000 0%, #220000 100%)'
+                : 'linear-gradient(135deg, #ffffff 0%, #fff0f0 100%)',
               borderRadius: 3,
               border: theme => theme.palette.mode === 'dark'
-                ? '1px solid rgba(129,140,248,0.5)'
-                : '1px solid rgba(37,99,235,0.2)',
+                ? '1px solid rgba(255,70,70,0.45)'
+                : '1px solid rgba(255,70,70,0.25)',
               boxShadow: theme => theme.palette.mode === 'dark'
                 ? '0 18px 40px rgba(15,23,42,0.9)'
                 : '0 14px 32px rgba(15,23,42,0.25)',
             }
           }}
         >
-          <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pb: 2, borderBottom: theme => theme.palette.mode === 'dark' ? '1px solid rgba(148,163,255,0.4)' : '1px solid rgba(37,99,235,0.15)' }}>
+          <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pb: 2, borderBottom: theme => theme.palette.mode === 'dark' ? '1px solid rgba(255,70,70,0.4)' : '1px solid rgba(255,70,70,0.2)' }}>
             <Typography variant="h6" sx={{ color: theme => theme.palette.mode === 'dark' ? 'white' : '#0f172a', fontWeight: 'bold' }}>
               Select Payment Method
             </Typography>
             <Button onClick={() => setShowPaymentModal(false)} sx={{ color: theme => theme.palette.mode === 'dark' ? '#e5e7eb' : '#0f172a', minWidth: 'auto', p: 0 }}>
-              <CloseIcon />
+              x
             </Button>
           </DialogTitle>
           <DialogContent sx={{ mt: 2 }}>
             {/* Privacy and delivery notice */}
-            <Box sx={{ mb: 2, p: 1.5, backgroundColor: theme => theme.palette.mode === 'dark' ? 'rgba(37,99,235,0.2)' : 'rgba(191,219,254,0.6)', borderRadius: 2, border: theme => theme.palette.mode === 'dark' ? '1px solid rgba(129,140,248,0.8)' : '1px solid rgba(37,99,235,0.45)' }}>
-              <Typography variant="body2" sx={{ color: theme => theme.palette.mode === 'dark' ? '#e5f0ff' : '#1d4ed8', textAlign: 'center', fontWeight: 'bold' }}>
+            <Box sx={{ mb: 2, p: 1.5, backgroundColor: theme => theme.palette.mode === 'dark' ? 'rgba(255,40,40,0.18)' : 'rgba(255,220,220,0.7)', borderRadius: 2, border: theme => theme.palette.mode === 'dark' ? '1px solid rgba(255,70,70,0.65)' : '1px solid rgba(255,70,70,0.35)' }}>
+              <Typography variant="body2" sx={{ color: theme => theme.palette.mode === 'dark' ? '#ffd6d6' : '#a40000', textAlign: 'center', fontWeight: 'bold' }}>
                 For privacy, generic names will appear during automatic payment checkout.<br />
                 Content is delivered automatically after payment.
               </Typography>
@@ -790,7 +993,7 @@ I'm sending the payment from my wallet. Please confirm the transaction and provi
             <Typography variant="body1" sx={{ color: theme => theme.palette.text.secondary, mb: 3, textAlign: 'center' }}>
               Video: <strong>{video.title}</strong>
               <br />
-              Price: <strong style={{ color: '#4caf50' }}>${video.price.toFixed(2)}</strong>
+              Price: <strong style={{ color: '#ff4a55' }}>${video.price.toFixed(2)}</strong>
             </Typography>
 
             {/* PayJSR — só se chave no admin ou VITE_PAYJSR_ENABLED */}
@@ -799,18 +1002,17 @@ I'm sending the payment from my wallet. Please confirm the transaction and provi
                 variant="contained"
                 fullWidth
                 size="large"
-                startIcon={<PaymentIcon />}
                 onClick={handleStripePayment}
                 disabled={isStripeLoading}
                 sx={{
                   mb: 2,
                   py: 2,
-                  background: 'linear-gradient(135deg, #4fc3f7 0%, #38bdf8 40%, #0ea5e9 100%)',
+                  background: '#e31b23',
                   color: 'white',
                   fontWeight: 'bold',
                   fontSize: '1rem',
                   '&:hover': {
-                    background: 'linear-gradient(135deg, #7dd3fc 0%, #38bdf8 45%, #0284c7 100%)',
+                    background: '#c9151d',
                   },
                   '&:disabled': {
                     background: '#555',
@@ -828,18 +1030,17 @@ I'm sending the payment from my wallet. Please confirm the transaction and provi
                 variant="contained"
                 fullWidth
                 size="large"
-                startIcon={<CreditCardIcon />}
                 onClick={handleWhoPayment}
                 disabled={isStripeLoading || !whoApiKey}
                 sx={{
                   mb: 2,
                   py: 2,
-                  background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 50%, #312e81 100%)',
+                  background: '#e31b23',
                   color: 'white',
                   fontWeight: 'bold',
                   fontSize: '1rem',
                   '&:hover': {
-                    background: 'linear-gradient(135deg, #818cf8 0%, #4f46e5 55%, #1d2671 100%)',
+                    background: '#c9151d',
                   },
                   '&:disabled': {
                     background: '#555',
@@ -857,18 +1058,17 @@ I'm sending the payment from my wallet. Please confirm the transaction and provi
                 variant="contained"
                 fullWidth
                 size="large"
-                startIcon={<CreditCardIcon />}
                 onClick={handlePayPalPayment}
                 disabled={isStripeLoading}
                 sx={{
                   mb: 2,
                   py: 2,
-                  background: 'linear-gradient(135deg, #0070ba 0%, #1546a0 100%)',
+                  background: '#e31b23',
                   color: 'white',
                   fontWeight: 'bold',
                   fontSize: '1rem',
                   '&:hover': {
-                    background: 'linear-gradient(135deg, #0083d0 0%, #1852b0 100%)',
+                    background: '#c9151d',
                   },
                   '&:disabled': {
                     background: '#555',
@@ -913,17 +1113,16 @@ I'm sending the payment from my wallet. Please confirm the transaction and provi
                     variant="contained"
                     fullWidth
                     size="large"
-                    startIcon={<AccountBalanceWalletIcon />}
                     onClick={handleCryptoPayment}
                     disabled={!selectedCryptoWallet || !telegramUsername}
                     sx={{
                       py: 2,
-                      background: 'linear-gradient(135deg, #f97316 0%, #f59e0b 50%, #facc15 100%)',
+                      background: '#e31b23',
                       color: 'white',
                       fontWeight: 'bold',
                       fontSize: '1rem',
                       '&:hover': {
-                        background: 'linear-gradient(45deg, #f7931a 40%, #ff9900 100%)',
+                        background: '#c9151d',
                       },
                       '&:disabled': {
                         background: '#555',
@@ -931,7 +1130,7 @@ I'm sending the payment from my wallet. Please confirm the transaction and provi
                       }
                     }}
                   >
-                    ₿ Pay with Cryptocurrency
+                    Pay with Cryptocurrency
                   </Button>
                 </>
               ) : (
@@ -942,14 +1141,113 @@ I'm sending the payment from my wallet. Please confirm the transaction and provi
             </Box>
 
             {/* Bonus Message */}
-            <Box sx={{ mt: 3, p: 2, backgroundColor: 'rgba(142, 36, 170, 0.1)', borderRadius: 2, border: '1px solid rgba(142, 36, 170, 0.3)' }}>
-              <Typography variant="body2" sx={{ color: '#4caf50', textAlign: 'center', fontWeight: 'bold' }}>
+            <Box sx={{ mt: 3, p: 2, backgroundColor: 'rgba(227, 27, 35, 0.08)', borderRadius: 2, border: '1px solid rgba(227, 27, 35, 0.3)' }}>
+              <Typography variant="body2" sx={{ color: '#ffc2c6', textAlign: 'center', fontWeight: 'bold' }}>
                 🎁 Bonus: After payment, message us on Telegram for free bonus pack!
               </Typography>
             </Box>
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Details Modal */}
+      <Dialog
+        open={showDetailsModal}
+        onClose={() => setShowDetailsModal(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            background: 'linear-gradient(180deg, rgba(12,12,14,0.98) 0%, rgba(8,8,10,0.98) 100%)',
+            borderRadius: 3,
+            border: '1px solid rgba(227,27,35,0.55)',
+            boxShadow: '0 18px 44px rgba(0,0,0,0.7)',
+          }
+        }}
+      >
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pb: 1.5 }}>
+          <Typography sx={{ fontWeight: 900, color: '#f2f2f3' }}>{video.title}</Typography>
+          <Button onClick={() => setShowDetailsModal(false)} sx={{ color: '#ffc2c6', minWidth: 'auto', p: 0 }}>
+            x
+          </Button>
+        </DialogTitle>
+        <DialogContent sx={{ pt: 0 }}>
+          <Typography variant="body2" sx={{ color: '#b8b2be', mb: 2 }}>
+            {video.description || 'No description available'}
+          </Typography>
+
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
+            <Chip
+              label={`Views: ${formatViews(video.views)}`}
+              size="small"
+              sx={{ bgcolor: 'rgba(15,15,17,0.96)', color: '#ffc2c6', border: '1px solid rgba(227,27,35,0.5)', fontWeight: 800 }}
+            />
+            {createdAtField && (
+              <Chip
+                label={`Added: ${formatDate(createdAtField)}`}
+                size="small"
+                sx={{ bgcolor: 'rgba(15,15,17,0.96)', color: '#ffc2c6', border: '1px solid rgba(227,27,35,0.5)', fontWeight: 800 }}
+              />
+            )}
+            {video.duration && (
+              <Chip
+                label={`Duration: ${formatDuration(video.duration)}`}
+                size="small"
+                sx={{ bgcolor: 'rgba(15,15,17,0.96)', color: '#ffc2c6', border: '1px solid rgba(227,27,35,0.5)', fontWeight: 800 }}
+              />
+            )}
+          </Box>
+
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 2 }}>
+            <Typography sx={{ color: '#7b747f', textDecoration: 'line-through', fontWeight: 600, fontSize: '1rem' }}>
+              ${(video.price * 2).toFixed(0)}
+            </Typography>
+            <Typography sx={{ color: '#ff4a55', fontWeight: 900, fontSize: '2.1rem', lineHeight: 1 }}>
+              ${video.price.toFixed(0)}
+            </Typography>
+            <Chip
+              label={`SAVE $${Math.max(0, Math.round(video.price)).toFixed(0)}`}
+              size="small"
+              sx={{ height: '28px', fontWeight: 900, background: '#e31b23', color: 'white', '& .MuiChip-label': { px: 1.2 } }}
+            />
+          </Box>
+
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            <Button
+              variant="outlined"
+              fullWidth
+              href={telegramHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              sx={{
+                borderRadius: '999px',
+                borderColor: 'rgba(227,27,35,0.6)',
+                color: '#ffc2c6',
+                '&:hover': { borderColor: 'rgba(227,27,35,0.85)', backgroundColor: 'rgba(227,27,35,0.12)' },
+              }}
+            >
+              Telegram
+            </Button>
+            {!video.is_free && (
+              <Button
+                variant="contained"
+                fullWidth
+                onClick={() => {
+                  setShowDetailsModal(false);
+                  setShowPaymentModal(true);
+                }}
+                sx={{
+                  borderRadius: '999px',
+                  background: '#e31b23',
+                  '&:hover': { background: '#c9151d' },
+                }}
+              >
+                Payment Options
+              </Button>
+            )}
+          </Box>
+        </DialogContent>
+      </Dialog>
     </>
   );
 };

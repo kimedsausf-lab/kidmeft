@@ -45,33 +45,31 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
     setMode(prevMode => (prevMode === 'dark' ? 'light' : 'dark'));
   };
 
-  // Cores principais mais vivas para botões e destaques
-  const ebookPrimaryBlue = '#ff3366';
-  const ebookPrimaryBlueDark = '#e0004d';
-  const ebookAccentCyan = '#00e5ff';
-  const ebookAccentYellow = '#ffd600';
+  // Paleta: preto + vermelho (sem azul)
+  const brandRed = '#e31b23';
+  const brandRedDark = '#c9151d';
 
   // Create MUI theme based on mode, usando a paleta do checkout
   const theme = createTheme({
     palette: {
       mode,
       primary: {
-        main: ebookPrimaryBlue,
+        main: brandRed,
       },
       secondary: {
-        main: ebookAccentCyan,
+        main: brandRedDark,
       },
       background: {
         default: mode === 'dark' 
-          ? '#020617' 
+          ? '#000000' 
           : '#f7f7fb',
         paper: mode === 'dark' 
-          ? 'rgba(3,7,26,0.98)' 
+          ? '#0a0a0c' 
           : '#ffffff',
       },
       text: {
         primary: mode === 'dark' ? '#e8e8e8' : '#111111',
-        secondary: mode === 'dark' ? '#9fb3ff' : '#4b4b4b',
+        secondary: mode === 'dark' ? '#b8b2be' : '#4b4b4b',
       },
       error: {
         main: '#d32f2f',
@@ -115,7 +113,7 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
               inset: 0,
               borderRadius: 999,
               background:
-                'radial-gradient(circle at 0 0, rgba(79,195,247,0.35), transparent 55%), radial-gradient(circle at 100% 100%, rgba(21,101,192,0.35), transparent 55%)',
+                `radial-gradient(circle at 0 0, rgba(227,27,35,0.25), transparent 55%), radial-gradient(circle at 100% 100%, rgba(227,27,35,0.22), transparent 55%)`,
               opacity: 0,
               transform: 'scale(0.9)',
               transition: 'opacity 0.25s ease, transform 0.25s ease',
@@ -139,14 +137,14 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
             },
           },
           containedPrimary: {
-            background: `linear-gradient(135deg, ${ebookPrimaryBlue} 0%, ${ebookPrimaryBlueDark} 100%)`,
-            boxShadow: '0 6px 18px rgba(0,112,186,0.45)',
+            background: `linear-gradient(135deg, ${brandRed} 0%, ${brandRedDark} 100%)`,
+            boxShadow: '0 10px 26px rgba(227,27,35,0.26)',
             '&:hover': {
-              background: 'linear-gradient(135deg, #0083d0 0%, #1852b0 100%)',
-              boxShadow: '0 10px 24px rgba(0,112,186,0.6)',
+              background: `linear-gradient(135deg, ${brandRed} 0%, ${brandRedDark} 100%)`,
+              boxShadow: '0 14px 34px rgba(227,27,35,0.32)',
             },
             '&:active': {
-              boxShadow: '0 4px 14px rgba(0,112,186,0.5)',
+              boxShadow: '0 8px 22px rgba(227,27,35,0.26)',
             },
           },
         },
@@ -162,8 +160,8 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
             '&:hover': {
               transform: 'translateY(-2px)',
               zIndex: 1,
-              borderColor: mode === 'dark' ? 'rgba(79,195,247,0.3)' : 'rgba(79,195,247,0.3)',
-              boxShadow: mode === 'dark' ? '0 10px 24px rgba(0,112,186,0.45)' : '0 10px 24px rgba(0,112,186,0.25)',
+              borderColor: mode === 'dark' ? 'rgba(227,27,35,0.45)' : 'rgba(227,27,35,0.3)',
+              boxShadow: mode === 'dark' ? '0 16px 36px rgba(227,27,35,0.25)' : '0 10px 24px rgba(227,27,35,0.18)',
             },
           },
         },

@@ -44,6 +44,19 @@ interface AuthProviderProps {
 // Session check interval (5 minutes)
 const SESSION_CHECK_INTERVAL = 5 * 60 * 1000;
 
+type SessionLike = {
+  id: string;
+  userId?: string;
+  user_id?: string;
+  token: string;
+  userAgent?: string;
+  user_agent?: string;
+  expiresAt?: string;
+  expires_at?: string;
+  isActive?: boolean;
+  is_active?: boolean;
+};
+
 // Auth provider component
 export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -69,10 +82,11 @@ export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
     return () => clearInterval(intervalId);
   }, []);
 
-  // Helper: server API base (evitar URL vazia em produção para não receber HTML em vez de JSON)
-  const API_BASE_URL = import.meta.env.DEV
-    ? 'http://localhost:3000'
-    : (import.meta.env.VITE_API_URL?.trim() || (typeof window !== 'undefined' ? window.location.origin : ''));
+  // API base:
+  // - prefer explicit VITE_API_URL when provided
+  // - otherwise use same-origin so deployed app works without localhost hardcode
+  const API_BASE_URL = import.meta.env.VITE_API_URL?.trim()
+    || (typeof window !== 'undefined' ? window.location.origin : '');
 
   // Login function using Supabase-backed API
   const login = async (email: string, password: string, redirectPath?: string) => {
@@ -169,9 +183,10 @@ export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(sessionPayload)
       });
-      const session = resp.ok && (resp.headers.get('content-type') || '').includes('application/json')
+      const sessionRaw = resp.ok && (resp.headers.get('content-type') || '').includes('application/json')
         ? await resp.json()
         : null;
+      const session = sessionRaw ? normalizeSession(sessionRaw as SessionLike) : null;
       
       // Store session token in local storage
       localStorage.setItem('sessionToken', token);
@@ -254,12 +269,15 @@ export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
       
       // Get session from server (Supabase)
       const resp = await fetch(`${API_BASE_URL}/api/sessions/token/${encodeURIComponent(token)}`);
-      const session = resp.ok && (resp.headers.get('content-type') || '').includes('application/json')
+      const sessionRaw = resp.ok && (resp.headers.get('content-type') || '').includes('application/json')
         ? await resp.json()
         : null;
+      const session = sessionRaw ? normalizeSession(sessionRaw as SessionLike) : null;
       
       if (!session) {
         console.log('No session found with this token');
+        // Token stale/invalid, remove to avoid repeated 404 loops
+        localStorage.removeItem('sessionToken');
         return null;
       }
       
@@ -389,6 +407,18 @@ export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
+
+function normalizeSession(raw: SessionLike): SessionData {
+  return {
+    id: raw.id,
+    userId: raw.userId || raw.user_id || '',
+    token: raw.token,
+    userAgent: raw.userAgent || raw.user_agent || '',
+    expiresAt: raw.expiresAt || raw.expires_at || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    isActive: typeof raw.isActive === 'boolean' ? raw.isActive : (raw.is_active ?? true),
+    createdAt: new Date().toISOString(),
+  };
+}
 
 // Hash password using Web Crypto API (browser)
 async function hashPasswordWithWebCrypto(password: string): Promise<string> {

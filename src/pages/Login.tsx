@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { FC } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import Container from '@mui/material/Container';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -18,10 +18,9 @@ const Login: FC = () => {
   const theme = useTheme();
   const { login, loading, error, user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
   
-  // Get the "from" location from state, or default to /admin
-  const from = location.state?.from || '/admin';
+  // Always redirect to home after login to avoid unstable admin route crash
+  const from = '/';
   
   // Redirect if already logged in
   useEffect(() => {

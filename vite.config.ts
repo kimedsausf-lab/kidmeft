@@ -51,9 +51,12 @@ export default defineConfig(({ mode }) => {
         },
         external: [],
         output: {
-          manualChunks: {
-            vendor: ['react', 'react-dom'],
-            mui: ['@mui/material', '@mui/icons-material']
+          manualChunks: (id) => {
+            if (id.includes('node_modules')) {
+              if (id.includes('@mui/')) return 'mui';
+              if (id.includes('react')) return 'vendor';
+              return 'vendor';
+            }
           }
         }
       }

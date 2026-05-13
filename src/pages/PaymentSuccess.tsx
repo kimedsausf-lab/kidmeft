@@ -721,7 +721,7 @@ const PaymentSuccess: FC = () => {
                 }
               }}
             >
-              Contact Support on Telegram
+              Chat Telegram
             </Button>
           )}
         </Box>
